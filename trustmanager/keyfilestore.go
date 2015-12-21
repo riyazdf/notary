@@ -353,7 +353,11 @@ func encryptAndAddKey(s LimitedFileStore, passwd string, cachedKeys map[string]*
 	}
 
 	cachedKeys[name] = &cachedKey{alias: alias, key: privKey}
-	return s.Add(filepath.Join(getSubdir(alias), name+"_"+alias), pemPrivKey)
+
+	// Remove slashes from delegations in path for consistency
+	// ex: tuf_keys/docker.com/notary/<HEX>_targets_level1
+	path := filepath.Join(getSubdir(alias), name+"_"+strings.Replace(alias, "/", "_", -1))
+	return s.Add(path, pemPrivKey)
 }
 
 func importKey(s LimitedFileStore, passphraseRetriever passphrase.Retriever, cachedKeys map[string]*cachedKey, alias string, pemBytes []byte) error {
