@@ -90,7 +90,8 @@ type tufCommander struct {
 	retriever    passphrase.Retriever
 
 	// these are for command line parsing - no need to set
-	roles []string
+	roles          []string
+	customDataPath string
 }
 
 func (t *tufCommander) AddToCommand(cmd *cobra.Command) {
@@ -113,7 +114,10 @@ func (t *tufCommander) AddToCommand(cmd *cobra.Command) {
 	cmdTufRemove.Flags().StringSliceVarP(&t.roles, "roles", "r", nil, "Delegation roles to remove this target from")
 	cmd.AddCommand(cmdTufRemove)
 
-	cmd.AddCommand(cmdTufAddChecksumTemplate.ToCommand(t.tufAddByChecksum))
+	cmdTufAddChecksum := cmdTufAddChecksumTemplate.ToCommand(t.tufAddByChecksum)
+	cmdTufAddChecksum.Flags().StringVar(
+		&t.customDataPath, "custom", "", "Filepath to custom data for this target")
+	cmd.AddCommand(cmdTufAddChecksum)
 }
 
 func (t *tufCommander) tufAdd(cmd *cobra.Command, args []string) error {
@@ -168,7 +172,6 @@ func (t *tufCommander) tufAddByChecksum(cmd *cobra.Command, args []string) error
 	targetName := args[1]
 	targetChecksum := args[2]
 	targetSize := args[3]
-	targetCustomFile := args[4]
 
 	targetInt64Len, err := strconv.ParseInt(targetSize, 0, 64)
 	if err != nil {
@@ -187,8 +190,8 @@ func (t *tufCommander) tufAddByChecksum(cmd *cobra.Command, args []string) error
 	targetHash["sha256"] = []byte(targetChecksum)
 
 	var targetCustomBytes json.RawMessage
-	if targetCustomFile != "" {
-		targetBytes, err := ioutil.ReadFile(targetCustomFile)
+	if t.customDataPath != "" {
+		targetBytes, err := ioutil.ReadFile(t.customDataPath)
 		if err != nil {
 			return err
 		}
@@ -206,7 +209,7 @@ func (t *tufCommander) tufAddByChecksum(cmd *cobra.Command, args []string) error
 		return err
 	}
 	cmd.Printf(
-		"Addition of target \"%s\" to repository \"%s\" staged for next publish.\n",
+		"Addition of target by checksum \"%s\" to repository \"%s\" staged for next publish.\n",
 		targetName, gun)
 	return nil
 }

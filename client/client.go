@@ -344,6 +344,8 @@ func (r *NotaryRepository) AddTarget(target *Target, customData cjson.RawMessage
 	logrus.Debugf("Adding target \"%s\" with sha256 \"%x\" and size %d bytes.\n", target.Name, target.Hashes["sha256"], target.Length)
 
 	meta := data.FileMeta{Length: target.Length, Hashes: target.Hashes, Custom: customData}
+	logrus.Debugf("Using custom data for meta %v", customData)
+	logrus.Debugf("Final metadata: %v", meta)
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return err
