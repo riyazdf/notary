@@ -3,6 +3,7 @@ package data
 import (
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/subtle"
 	"fmt"
 	"hash"
 	"io"
@@ -211,5 +212,34 @@ func (s *Signature) UnmarshalJSON(data []byte) error {
 	}
 	uSignature.Method = SigAlgorithm(strings.ToLower(string(uSignature.Method)))
 	*s = Signature(uSignature)
+	return nil
+}
+
+// CheckHashes verifies all the checksums specified by the "hashes" of the payload.
+func CheckHashes(payload []byte, hashes Hashes) error {
+	cnt := 0
+
+	// k, v indicate the hash algorithm and the corresponding value
+	for k, v := range hashes {
+		switch k {
+		case "sha256":
+			checksum := sha256.Sum256(payload)
+			if subtle.ConstantTimeCompare(checksum[:], v) == 0 {
+				return fmt.Errorf("%s checksum mismatched", k)
+			}
+			cnt++
+		case "sha512":
+			checksum := sha512.Sum512(payload)
+			if subtle.ConstantTimeCompare(checksum[:], v) == 0 {
+				return fmt.Errorf("%s checksum mismatched", k)
+			}
+			cnt++
+		}
+	}
+
+	if cnt == 0 {
+		return fmt.Errorf("at least one supported hash needed")
+	}
+
 	return nil
 }
