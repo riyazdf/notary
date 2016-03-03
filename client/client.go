@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	cjson "github.com/docker/go/canonical/json"
 	"github.com/docker/notary"
 	"github.com/docker/notary/certs"
 	"github.com/docker/notary/client/changelist"
@@ -128,9 +129,11 @@ type Target struct {
 
 // TargetWithRole represents a Target that exists in a particular role - this is
 // produced by ListTargets and GetTargetByName
+// Also includes optional Custom metadata as a raw byte array
 type TargetWithRole struct {
 	Target
-	Role string
+	Role   string
+	Custom cjson.RawMessage
 }
 
 // NewTarget is a helper method that returns a Target
@@ -331,7 +334,7 @@ func addChange(cl *changelist.FileChangelist, c changelist.Change, roles ...stri
 // AddTarget creates new changelist entries to add a target to the given roles
 // in the repository when the changelist gets applied at publish time.
 // If roles are unspecified, the default role is "targets".
-func (r *NotaryRepository) AddTarget(target *Target, roles ...string) error {
+func (r *NotaryRepository) AddTarget(target *Target, customData cjson.RawMessage, roles ...string) error {
 
 	cl, err := changelist.NewFileChangelist(filepath.Join(r.tufRepoPath, "changelist"))
 	if err != nil {
@@ -340,7 +343,7 @@ func (r *NotaryRepository) AddTarget(target *Target, roles ...string) error {
 	defer cl.Close()
 	logrus.Debugf("Adding target \"%s\" with sha256 \"%x\" and size %d bytes.\n", target.Name, target.Hashes["sha256"], target.Length)
 
-	meta := data.FileMeta{Length: target.Length, Hashes: target.Hashes}
+	meta := data.FileMeta{Length: target.Length, Hashes: target.Hashes, Custom: customData}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return err
@@ -398,7 +401,7 @@ func (r *NotaryRepository) ListTargets(roles ...string) ([]*TargetWithRole, erro
 					continue
 				}
 				targets[targetName] =
-					&TargetWithRole{Target: Target{Name: targetName, Hashes: targetMeta.Hashes, Length: targetMeta.Length}, Role: validRole.Name}
+					&TargetWithRole{Target: Target{Name: targetName, Hashes: targetMeta.Hashes, Length: targetMeta.Length}, Role: validRole.Name, Custom: targetMeta.Custom}
 			}
 			return nil
 		}
@@ -452,7 +455,7 @@ func (r *NotaryRepository) GetTargetByName(name string, roles ...string) (*Targe
 		err = r.tufRepo.WalkTargets(name, role, getTargetVisitorFunc, skipRoles...)
 		// Check that we didn't error, and that we assigned to our target
 		if err == nil && foundTarget {
-			return &TargetWithRole{Target: Target{Name: name, Hashes: resultMeta.Hashes, Length: resultMeta.Length}, Role: resultRoleName}, nil
+			return &TargetWithRole{Target: Target{Name: name, Hashes: resultMeta.Hashes, Length: resultMeta.Length}, Role: resultRoleName, Custom: resultMeta.Custom}, nil
 		}
 	}
 	return nil, fmt.Errorf("No trust data for %s", name)

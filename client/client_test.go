@@ -630,7 +630,7 @@ func addTarget(t *testing.T, repo *NotaryRepository, targetName, targetFile stri
 	roles ...string) *Target {
 	target, err := NewTarget(targetName, targetFile)
 	assert.NoError(t, err, "error creating target")
-	err = repo.AddTarget(target, roles...)
+	err = repo.AddTarget(target, nil, roles...)
 	assert.NoError(t, err, "error adding target")
 	return target
 }
@@ -815,7 +815,7 @@ func testAddTargetToSpecifiedInvalidRoles(t *testing.T, clearCache bool) {
 		target, err := NewTarget("latest", "../fixtures/intermediate-ca.crt")
 		assert.NoError(t, err, "error creating target")
 
-		err = repo.AddTarget(target, data.CanonicalTargetsRole, invalidRole)
+		err = repo.AddTarget(target, nil, data.CanonicalTargetsRole, invalidRole)
 		assert.Error(t, err, "Expected an ErrInvalidRole error")
 		assert.IsType(t, data.ErrInvalidRole{}, err)
 
@@ -870,7 +870,7 @@ func TestAddTargetErrorWritingChanges(t *testing.T) {
 	testErrorWritingChangefiles(t, func(repo *NotaryRepository) error {
 		target, err := NewTarget("latest", "../fixtures/intermediate-ca.crt")
 		assert.NoError(t, err, "error creating target")
-		return repo.AddTarget(target, data.CanonicalTargetsRole)
+		return repo.AddTarget(target, nil, data.CanonicalTargetsRole)
 	})
 }
 

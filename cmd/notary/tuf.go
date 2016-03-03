@@ -19,12 +19,15 @@ import (
 	"github.com/docker/distribution/registry/client/transport"
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/go-connections/tlsconfig"
+	"github.com/docker/go/canonical/json"
+	"github.com/docker/notary/client"
 	notaryclient "github.com/docker/notary/client"
 	"github.com/docker/notary/passphrase"
 	"github.com/docker/notary/tuf/data"
 	"github.com/docker/notary/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"strconv"
 )
 
 var cmdTufListTemplate = usageTemplate{
@@ -37,6 +40,12 @@ var cmdTufAddTemplate = usageTemplate{
 	Use:   "add [ GUN ] <target> <file>",
 	Short: "Adds the file as a target to the trusted collection.",
 	Long:  "Adds the file as a target to the local trusted collection identified by the Globally Unique Name. This is an offline operation.  Please then use `publish` to push the changes to the remote trusted collection.",
+}
+
+var cmdTufAddChecksumTemplate = usageTemplate{
+	Use:   "add-checksum [ GUN ] <target> <checksum> <size>",
+	Short: "Adds the specified checksum and byte size as a target to the trusted collection.",
+	Long:  "Adds the specified checksum and byte size to the local trusted collection identified by the Globally Unique Name. This is an offline operation.  Please then use `publish` to push the changes to the remote trusted collection.",
 }
 
 var cmdTufRemoveTemplate = usageTemplate{
@@ -103,6 +112,8 @@ func (t *tufCommander) AddToCommand(cmd *cobra.Command) {
 	cmdTufRemove := cmdTufRemoveTemplate.ToCommand(t.tufRemove)
 	cmdTufRemove.Flags().StringSliceVarP(&t.roles, "roles", "r", nil, "Delegation roles to remove this target from")
 	cmd.AddCommand(cmdTufRemove)
+
+	cmd.AddCommand(cmdTufAddChecksumTemplate.ToCommand(t.tufAddByChecksum))
 }
 
 func (t *tufCommander) tufAdd(cmd *cobra.Command, args []string) error {
@@ -132,7 +143,66 @@ func (t *tufCommander) tufAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// If roles is empty, we default to adding to targets
-	if err = nRepo.AddTarget(target, t.roles...); err != nil {
+	// For now, we don't support adding custom data from notary CLI
+	if err = nRepo.AddTarget(target, nil, t.roles...); err != nil {
+		return err
+	}
+	cmd.Printf(
+		"Addition of target \"%s\" to repository \"%s\" staged for next publish.\n",
+		targetName, gun)
+	return nil
+}
+
+// Hack for ConMan
+func (t *tufCommander) tufAddByChecksum(cmd *cobra.Command, args []string) error {
+	if len(args) < 4 {
+		cmd.Usage()
+		return fmt.Errorf("Must specify a GUN, target, sha256 checksum, byte size of target data, and potentially custom data")
+	}
+	config, err := t.configGetter()
+	if err != nil {
+		return err
+	}
+
+	gun := args[0]
+	targetName := args[1]
+	targetChecksum := args[2]
+	targetSize := args[3]
+	targetCustomFile := args[4]
+
+	targetInt64Len, err := strconv.ParseInt(targetSize, 0, 64)
+	if err != nil {
+		return err
+	}
+
+	// no online operations are performed by add so the transport argument
+	// should be nil
+	nRepo, err := notaryclient.NewNotaryRepository(
+		config.GetString("trust_dir"), gun, getRemoteTrustServer(config), nil, t.retriever)
+	if err != nil {
+		return err
+	}
+
+	targetHash := data.Hashes{}
+	targetHash["sha256"] = []byte(targetChecksum)
+
+	var targetCustomBytes json.RawMessage
+	if targetCustomFile != "" {
+		targetBytes, err := ioutil.ReadFile(targetCustomFile)
+		if err != nil {
+			return err
+		}
+		if err = targetCustomBytes.UnmarshalJSON(targetBytes); err != nil {
+			return err
+		}
+	}
+
+	target := &client.Target{Name: targetName, Hashes: targetHash, Length: targetInt64Len}
+	if err != nil {
+		return err
+	}
+	// If roles is empty, we default to adding to targets
+	if err = nRepo.AddTarget(target, targetCustomBytes, t.roles...); err != nil {
 		return err
 	}
 	cmd.Printf(
