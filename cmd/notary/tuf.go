@@ -14,6 +14,7 @@ import (
 
 	"crypto/subtle"
 
+	"encoding/hex"
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution/registry/client/auth"
 	"github.com/docker/distribution/registry/client/transport"
@@ -187,7 +188,10 @@ func (t *tufCommander) tufAddByChecksum(cmd *cobra.Command, args []string) error
 	}
 
 	targetHash := data.Hashes{}
-	targetHash["sha256"] = []byte(targetChecksum)
+	targetHash["sha256"], err = hex.DecodeString(targetChecksum)
+	if err != nil {
+		return err
+	}
 
 	var targetCustomBytes json.RawMessage
 	if t.customDataPath != "" {
